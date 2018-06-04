@@ -1,6 +1,7 @@
 .vscode
 .DS_Store
 build_scripts/*
+!build_scripts/final
 !build_scripts/build_all.sh
 !build_scripts/build_ffmpeg.sh
 !build_scripts/build_ffmpeg_for_macos.sh
