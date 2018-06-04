@@ -4,46 +4,42 @@
 ## $2: build dir (prefix)
 ## $3: destination directory where ffmpeg binary will copy to
 
+## ERRORS: 
+## ERROR: shine not found using pkg-config (full) sudo apt-get install libshine-dev
+
+
+## Standalone Toolchain
+## ~/Android/Sdk/ndk-bundle/build/tools$ 
+## ./make-standalone-toolchain.sh --arch=arm64 --install-dir=/tmp/toolchain-arm64-21
+
 set -e
 set -x
 
-## Support either NDK linux or darwin (mac os)
-## Check $NDK exists
-if [ "$NDK" = "" ] || [ ! -d $NDK ]; then
-	echo "NDK variable not set or path to NDK is invalid, exiting..."
-	exit 1
-fi
+NDK="/home/deamon/Android/Sdk/ndk-bundle"
 
-export TARGET=$1
-export FLAVOR=$2
-export PREFIX=$3
-export DESTINATION_FOLDER=$4
-
-if [ "$(uname)" == "Darwin" ]; then
-    OS="darwin-x86_64"
-else
-    OS="linux-x86_64"
-fi
+export FFMPEG_VERSION="4.0"		#3.3.2
+export TARGET="arm64-v8a"		#armv7-a, arm64-v8a
+export FLAVOR="lite"			#full, lite
+export PREFIX=$(pwd)/build_dir
+export DESTINATION_FOLDER=$(pwd)/final/$FFMPEG_VERSION/$TARGET
 
 NATIVE_SYSROOT=/
 
-if [ "$FLAVOR" = "lite" ]; then 
-    # LITE flavor support android 16+
-    ARM_SYSROOT=$NDK/platforms/android-16/arch-arm/
-    X86_SYSROOT=$NDK/platforms/android-16/arch-x86/
-else 
-    # FULL flavor require android 21 at minimum (because of including openssl)
-    ARM_SYSROOT=$NDK/platforms/android-21/arch-arm/
-    X86_SYSROOT=$NDK/platforms/android-21/arch-x86/
-fi
-ARM_PREBUILT=$NDK/toolchains/arm-linux-androideabi-4.9/prebuilt/$OS
+ARM_SYSROOT="/tmp/toolchain-arm-21/sysroot"
+ARM_PREBUILT="/tmp/toolchain-arm-21"
+
+## NOT SUPPORTED ? ##
+X86_SYSROOT=$NDK/platforms/android-21/arch-x86/
 X86_PREBUILT=$NDK/toolchains/x86-4.9/prebuilt/$OS
 
-ARM64_SYSROOT=$NDK/platforms/android-21/arch-arm64/
-ARM64_PREBUILT=$NDK/toolchains/aarch64-linux-android-4.9/prebuilt/$OS
+ARM64_SYSROOT="/tmp/toolchain-arm64-21/sysroot"
+ARM64_PREBUILT="/tmp/toolchain-arm64-21"
 
+## NOT SUPPORTED ? ##
 X86_64_SYSROOT=$NDK/platforms/android-21/arch-x86_64/
 X86_64_PREBUILT=$NDK/toolchains/x86_64-4.9/prebuilt/$OS
+
+
 
 ## No longer support MIPS MIPS64
 
@@ -55,9 +51,6 @@ X86_64_PREBUILT=$NDK/toolchains/x86_64-4.9/prebuilt/$OS
 # MIPS64_PREBUILT=$NDK/toolchains/mips64el-linux-android-4.9/prebuilt/darwin-x86_64
 # MIPS64_CROSS_PREFIX=$MIPS64_PREBUILT/bin/$HOST-
 
-if [ "$FFMPEG_VERSION" = "" ]; then
-    FFMPEG_VERSION="3.3.2"
-fi
 if [ ! -d "ffmpeg-${FFMPEG_VERSION}" ]; then
     echo "Downloading ffmpeg-${FFMPEG_VERSION}.tar.bz2"
     curl -LO http://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.bz2
@@ -78,11 +71,11 @@ fi
 
 OPUS_VERSION="1.1.5"
 if [ ! -d "opus-${OPUS_VERSION}" ]; then
-    echo "Downloading opus-${OPUS_VERSION}"
-    curl -LO https://archive.mozilla.org/pub/opus/opus-${OPUS_VERSION}.tar.gz
-    tar -xzf opus-${OPUS_VERSION}.tar.gz
+   echo "Downloading opus-${OPUS_VERSION}"
+   curl -LO https://archive.mozilla.org/pub/opus/opus-${OPUS_VERSION}.tar.gz
+   tar -xzf opus-${OPUS_VERSION}.tar.gz
 else
-    echo "Using existing `pwd`/opus-${OPUS_VERSION}"
+   echo "Using existing `pwd`/opus-${OPUS_VERSION}"
 fi
 
 FDK_AAC_VERSION="0.1.5"
@@ -182,6 +175,10 @@ then
     HOST=arm-linux-androideabi
     CROSS_PREFIX=$ARM_PREBUILT/bin/$HOST-
     OPTIMIZE_CFLAGS="$OPTIMIZE_CFLAGS "
+    echo $SYSROOT
+    echo $HOST
+    echo $CROSS_PREFIX
+    echo OPTIMIZE_CFLAGS
 elif [ $ARCH == "arm64" ]
 then
     SYSROOT=$ARM64_SYSROOT
@@ -214,12 +211,14 @@ export PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig"
 export CPP="${CROSS_PREFIX}cpp"
 export CXX="${CROSS_PREFIX}g++"
 export CC="${CROSS_PREFIX}gcc"
+echo $CC
 export LD="${CROSS_PREFIX}ld"
+echo $LD
 export AR="${CROSS_PREFIX}ar"
 export NM="${CROSS_PREFIX}nm"
 export RANLIB="${CROSS_PREFIX}ranlib"
-export LDFLAGS="-L$PREFIX/lib -fPIE -pie "
-export CFLAGS="$OPTIMIZE_CFLAGS -I$PREFIX/include --sysroot=$SYSROOT -fPIE "
+export LDFLAGS="-L$PREFIX/lib -L/ -fPIE -pie "
+export CFLAGS="$OPTIMIZE_CFLAGS -I$PREFIX/include --sysroot=$SYSROOT -fPIE -D__ANDROID_API__=21" #$API #=21
 export CXXFLAGS="$CFLAGS "
 export CPPFLAGS="--sysroot=$SYSROOT "
 export STRIP=${CROSS_PREFIX}strip
@@ -262,12 +261,12 @@ fi;
 
 pushd opus-${OPUS_VERSION}
 ./configure \
-    --prefix=$PREFIX \
-    --host=$HOST \
-    --enable-static \
-    --disable-shared \
-    --disable-doc \
-    --disable-extra-programs
+   --prefix=$PREFIX \
+   --host=$HOST \
+   --enable-static \
+   --disable-shared \
+   --disable-doc \
+   --disable-extra-programs
 
 make clean
 make -j8
@@ -344,6 +343,8 @@ fi
 
 if [ "$FLAVOR" = "full" ]; then
     # Build - FULL version
+    #--disable-ffserver \
+
     ./configure --prefix=$PREFIX \
         $CROSS_COMPILE_FLAGS \
         --pkg-config=$(which pkg-config) \
@@ -359,8 +360,6 @@ if [ "$FLAVOR" = "full" ]; then
         --enable-ffmpeg \
         --disable-ffplay \
         --disable-ffprobe \
-        --disable-ffserver \
-        \
         --enable-libshine \
         --enable-libmp3lame \
         --enable-libopus \
@@ -374,6 +373,8 @@ if [ "$FLAVOR" = "full" ]; then
         $ADDITIONAL_CONFIGURE_FLAG
 else 
     # Build - LITE version
+    # --disable-ffserver \
+    # --enable-libshine \
     ./configure --prefix=$PREFIX \
         $CROSS_COMPILE_FLAGS \
         --pkg-config=$(which pkg-config) \
@@ -388,7 +389,6 @@ else
         --enable-ffmpeg \
         --disable-ffplay \
         --disable-ffprobe \
-        --disable-ffserver \
         \
         --disable-protocols \
         --enable-protocol='file,pipe' \
@@ -403,7 +403,6 @@ else
         --enable-encoder='aac,dnxhd,flac,flv,gif,libmp3lame,libopus,libshine,libvorbis,mpeg4,png,mjpeg,gif,srt,subrip,webvtt' \
         --enable-decoder='aac,aac_at,aac_fixed,aac_latm,dnxhd,flac,flv,h261,h263,h263i,h263p,h264,vp8,vp9,libopus,libvorbis,mp3,mpeg4,wavpack,png,mjpeg,gif,pcm_s16le,pcm_s16be,rawvideo,srt,webvtt' \
         \
-        --enable-libshine \
         --enable-libmp3lame \
         --enable-libopus \
         --enable-libvorbis \
@@ -423,7 +422,36 @@ cp $PREFIX/bin/ffmpeg $DESTINATION_FOLDER/$FLAVOR/
 popd
 }
 
-if [ $TARGET == 'arm-v7n' ]; then
+if [ $TARGET == 'all' ]; then
+    #arm64-v8a
+    CPU=armv8-a
+    ARCH=arm64
+    OPTIMIZE_CFLAGS="-march=$CPU -Os -O3"
+    ADDITIONAL_CONFIGURE_FLAG=
+    LIBX264_FLAGS=
+    cp -a $OPENSSL_PREBUILT_FOLDER/android/openssl-arm64-v8a/. $PREFIX
+    build_one
+    
+    # armv7-a
+    CPU=armv7-a
+    ARCH=arm
+    OPTIMIZE_CFLAGS="-mfloat-abi=softfp -marm -march=$CPU -Os -O3 "
+    ADDITIONAL_CONFIGURE_FLAG=
+    LIBX264_FLAGS=
+    cp -a $OPENSSL_PREBUILT_FOLDER/android/openssl-armeabi-v7a/. $PREFIX
+    build_one
+    
+    #x86_64
+    CPU=x86-64
+    ARCH=x86_64
+    OPTIMIZE_CFLAGS="-fomit-frame-pointer -march=$CPU -Os -O3"
+    ADDITIONAL_CONFIGURE_FLAG=
+    LIBX264_FLAGS=
+    cp -a $OPENSSL_PREBUILT_FOLDER/android/openssl-x86_64/. $PREFIX
+    build_one
+    
+    
+elif [ $TARGET == 'arm-v7n' ]; then
     #arm v7n
     CPU=armv7-a
     ARCH=arm
