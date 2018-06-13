@@ -19,7 +19,7 @@ NDK="/home/deamon/Android/Sdk/ndk-bundle"
 
 export FFMPEG_VERSION="4.0"		#3.3.2
 export TARGET="arm64-v8a"		#armv7-a, arm64-v8a
-export FLAVOR="lite"			#full, lite
+export FLAVOR="full"			#full, lite
 export PREFIX=$(pwd)/build_dir
 export DESTINATION_FOLDER=$(pwd)/final/$FFMPEG_VERSION/$TARGET
 
@@ -28,16 +28,9 @@ NATIVE_SYSROOT=/
 ARM_SYSROOT="/tmp/toolchain-arm-21/sysroot"
 ARM_PREBUILT="/tmp/toolchain-arm-21"
 
-## NOT SUPPORTED ? ##
-X86_SYSROOT=$NDK/platforms/android-21/arch-x86/
-X86_PREBUILT=$NDK/toolchains/x86-4.9/prebuilt/$OS
-
 ARM64_SYSROOT="/tmp/toolchain-arm64-21/sysroot"
 ARM64_PREBUILT="/tmp/toolchain-arm64-21"
 
-## NOT SUPPORTED ? ##
-X86_64_SYSROOT=$NDK/platforms/android-21/arch-x86_64/
-X86_64_PREBUILT=$NDK/toolchains/x86_64-4.9/prebuilt/$OS
 
 
 
@@ -184,41 +177,20 @@ then
     SYSROOT=$ARM64_SYSROOT
     HOST=aarch64-linux-android
     CROSS_PREFIX=$ARM64_PREBUILT/bin/$HOST-
-elif [ $ARCH == "x86_64" ]
-then
-    SYSROOT=$X86_64_SYSROOT
-    HOST=x86_64-linux-android
-    CROSS_PREFIX=$X86_64_PREBUILT/bin/$HOST-
-elif [ $ARCH == "i686" ]
-then
-    SYSROOT=$X86_SYSROOT
-    HOST=i686-linux-android
-    CROSS_PREFIX=$X86_PREBUILT/bin/$HOST-
-# elif [ $ARCH == "mips" ]
-# then
-#     SYSROOT=$MIPS_SYSROOT
-#     HOST=mipsel-linux-android
-#     CROSS_PREFIX=$MIPS_CROSS_PREFIX
-# elif [ $ARCH == "mips64" ]
-# then
-#     SYSROOT=$MIPS64_SYSROOT
-#     HOST=mips64el-linux-android
-#     CROSS_PREFIX=$MIPS64_CROSS_PREFIX
-
 fi
 
 export PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig"
 export CPP="${CROSS_PREFIX}cpp"
-export CXX="${CROSS_PREFIX}g++"
-export CC="${CROSS_PREFIX}gcc"
+export CXX="${CROSS_PREFIX}clang++"		#g++
+export CC="${CROSS_PREFIX}clang"	#gcc
 echo $CC
 export LD="${CROSS_PREFIX}ld"
 echo $LD
 export AR="${CROSS_PREFIX}ar"
 export NM="${CROSS_PREFIX}nm"
 export RANLIB="${CROSS_PREFIX}ranlib"
-export LDFLAGS="-L$PREFIX/lib -L/ -fPIE -pie "
-export CFLAGS="$OPTIMIZE_CFLAGS -I$PREFIX/include --sysroot=$SYSROOT -fPIE -D__ANDROID_API__=21" #$API #=21
+export LDFLAGS="-L$PREFIX/lib -L/ -fPIE -pie -fuse-ld=gold -Wl,-V"
+export CFLAGS="$OPTIMIZE_CFLAGS --sysroot=$SYSROOT -fPIE -D__ANDROID_API__=21"
 export CXXFLAGS="$CFLAGS "
 export CPPFLAGS="--sysroot=$SYSROOT "
 export STRIP=${CROSS_PREFIX}strip
@@ -344,6 +316,9 @@ fi
 if [ "$FLAVOR" = "full" ]; then
     # Build - FULL version
     #--disable-ffserver \
+    #--disable-shared \
+    #--enable-libshine \
+    #--enable-openssl \
 
     ./configure --prefix=$PREFIX \
         $CROSS_COMPILE_FLAGS \
@@ -353,22 +328,18 @@ if [ "$FLAVOR" = "full" ]; then
         --enable-small \
         --enable-gpl \
         --enable-nonfree \
-        \
-        --disable-shared \
         --enable-static \
-        \
+        --disable-shared \
         --enable-ffmpeg \
         --disable-ffplay \
         --disable-ffprobe \
-        --enable-libshine \
         --enable-libmp3lame \
         --enable-libopus \
         --enable-libvorbis \
         --enable-libx264 \
         --enable-libfdk-aac \
+        --disable-linux-perf \
         --enable-bsf=aac_adtstoasc \
-        --enable-openssl \
-        \
         --disable-doc \
         $ADDITIONAL_CONFIGURE_FLAG
 else 
@@ -422,36 +393,7 @@ cp $PREFIX/bin/ffmpeg $DESTINATION_FOLDER/$FLAVOR/
 popd
 }
 
-if [ $TARGET == 'all' ]; then
-    #arm64-v8a
-    CPU=armv8-a
-    ARCH=arm64
-    OPTIMIZE_CFLAGS="-march=$CPU -Os -O3"
-    ADDITIONAL_CONFIGURE_FLAG=
-    LIBX264_FLAGS=
-    cp -a $OPENSSL_PREBUILT_FOLDER/android/openssl-arm64-v8a/. $PREFIX
-    build_one
-    
-    # armv7-a
-    CPU=armv7-a
-    ARCH=arm
-    OPTIMIZE_CFLAGS="-mfloat-abi=softfp -marm -march=$CPU -Os -O3 "
-    ADDITIONAL_CONFIGURE_FLAG=
-    LIBX264_FLAGS=
-    cp -a $OPENSSL_PREBUILT_FOLDER/android/openssl-armeabi-v7a/. $PREFIX
-    build_one
-    
-    #x86_64
-    CPU=x86-64
-    ARCH=x86_64
-    OPTIMIZE_CFLAGS="-fomit-frame-pointer -march=$CPU -Os -O3"
-    ADDITIONAL_CONFIGURE_FLAG=
-    LIBX264_FLAGS=
-    cp -a $OPENSSL_PREBUILT_FOLDER/android/openssl-x86_64/. $PREFIX
-    build_one
-    
-    
-elif [ $TARGET == 'arm-v7n' ]; then
+if [ $TARGET == 'arm-v7n' ]; then
     #arm v7n
     CPU=armv7-a
     ARCH=arm
